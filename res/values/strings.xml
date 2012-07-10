@@ -5,9 +5,18 @@
     <string name="server">Server</string>
     <string name="port">Port</string>
     <string name="type">Type</string>
-    <string name="start">Start</string>
-    <string name="stop">Stop</string>
+    <string name="apply">Apply</string>
+    <string name="revert">Revert</string>
     <string name="udp">UDP</string>
     <string name="tcp">TCP</string>
+    <string name="forward">Forward</string>
+    <string name="normal">Normal</string>
+    <string name="primary">Primary</string>
+    <string name="secondary">Secondary</string>
+    <string name="preset">Preset</string>
+    <string name="like_this">Is DNS Forward usefull for you?\nPlease consider helping our development.</string>
+    <string name="rate">Rate!</string>
+    <string name="current_dns">Current DNS:</string>
+    <string name="please_wait">Please wait&#8230;</string>
 
 </resources>
