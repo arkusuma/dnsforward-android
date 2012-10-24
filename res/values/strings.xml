@@ -1,7 +1,6 @@
 <resources>
 
     <string name="app_name">DNS Forward</string>
-    <string name="menu_settings">Settings</string>
     <string name="server">Server</string>
     <string name="port">Port</string>
     <string name="type">Type</string>
@@ -14,9 +13,29 @@
     <string name="primary">Primary</string>
     <string name="secondary">Secondary</string>
     <string name="preset">Preset</string>
-    <string name="like_this">Is DNS Forward usefull for you?\nPlease consider helping our development.</string>
-    <string name="rate">Rate!</string>
+    <string name="like_this">Help our development :)</string>
+    <string name="rate">Rate 5 stars</string>
+    <string name="donate">Donate via PayPal</string>
+    <string name="share">Share with friends</string>
+    <string name="share_subject">DNS Forward</string>
+    <string name="share_text">Hi, I\'m using DNS Forward on my Android. Check it out at Play Store. http://goo.gl/gb4hr</string>
+    <string name="about">About</string>
+    <string name="visit_web">Visit us</string>
+    <string name="more_apps">More apps</string>
+    <string name="okay">Okay cool!</string>
     <string name="current_dns">Current DNS:</string>
     <string name="please_wait">Please wait&#8230;</string>
+    <string name="no_root">You need root to run DNS Forward.</string>
+    <string name="no_access">Please grant root access for DNS Forward.</string>
+    <string name="applied">DNS forwarded succesfully.</string>
+    <string name="reverted">DNS settings reverted to normal.</string>
+    <string name="auto">Apply automatically when connected to:</string>
+    <string name="wifi">WiFi</string>
+    <string name="mobile">Mobile</string>
+    <string name="usefull">Is DNS Forward usefull for you?</string>
+    <string name="help_us">Please consider doing one of these to support our development :)</string>
+    <string name="not_now">Not Now!</string>
+    <string name="copyright">Product of Grafian Software Crafter\nBandung, Indonesia 2012</string>
+    <string name="website">Website: http://grafian.com</string>
 
 </resources>

@@ -10,13 +10,18 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.util.regex.Pattern;
 
-import android.annotation.TargetApi;
-import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
-import android.content.SharedPreferences;
+import android.content.IntentFilter;
 import android.content.SharedPreferences.Editor;
+import android.net.ConnectivityManager;
+import android.net.DhcpInfo;
+import android.net.NetworkInfo;
 import android.net.Uri;
-import android.os.Build;
+import android.net.wifi.WifiManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.view.View;
@@ -24,24 +29,31 @@ import android.view.View.OnClickListener;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemSelectedListener;
 import android.widget.ArrayAdapter;
+import android.widget.CheckBox;
 import android.widget.EditText;
-import android.widget.RadioButton;
 import android.widget.RadioGroup;
 import android.widget.RadioGroup.OnCheckedChangeListener;
 import android.widget.Spinner;
 import android.widget.TextView;
+import android.widget.Toast;
 
-public class MainActivity extends Activity {
+import com.actionbarsherlock.app.SherlockActivity;
+import com.actionbarsherlock.view.Menu;
+import com.actionbarsherlock.view.MenuItem;
+import com.stericson.RootTools.CommandCapture;
+import com.stericson.RootTools.RootTools;
 
-	private static final Pattern IP_ADDRESS = Pattern
-			.compile("((25[0-5]|2[0-4][0-9]|[0-1][0-9]{2}|[1-9][0-9]|[1-9])\\.(25[0-5]|2[0-4]"
-					+ "[0-9]|[0-1][0-9]{2}|[1-9][0-9]|[1-9]|0)\\.(25[0-5]|2[0-4][0-9]|[0-1]"
-					+ "[0-9]{2}|[1-9][0-9]|[1-9]|0)\\.(25[0-5]|2[0-4][0-9]|[0-1][0-9]{2}"
-					+ "|[1-9][0-9]|[0-9]))");
+public class MainActivity extends SherlockActivity {
+
+	private static final Pattern IP_ADDRESS = Pattern.compile("((25[0-5]|2[0-4][0-9]|[0-1][0-9]{2}|[1-9][0-9]|[1-9])\\.(25[0-5]|2[0-4]"
+			+ "[0-9]|[0-1][0-9]{2}|[1-9][0-9]|[1-9]|0)\\.(25[0-5]|2[0-4][0-9]|[0-1]" + "[0-9]{2}|[1-9][0-9]|[1-9]|0)\\.(25[0-5]|2[0-4][0-9]|[0-1][0-9]{2}"
+			+ "|[1-9][0-9]|[0-9]))");
 
 	private static final String DONATION_URL = "https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=4T78LW4UVVN2Y";
 
-	private Handler handler = new Handler();
+	private final Settings mSettings = new Settings(this);
+	private final Handler mHandler = new Handler();
+	private final MyReceiver mReceiver = new MyReceiver();
 
 	@Override
 	public void onCreate(Bundle savedInstanceState) {
@@ -51,38 +63,137 @@ public class MainActivity extends Activity {
 		Spinner forwardSpinner = (Spinner) findViewById(R.id.mainForwardPreset);
 		Spinner normalSpinner = (Spinner) findViewById(R.id.mainNormalPreset);
 
-		findViewById(R.id.mainApply).setOnClickListener(mOnApplyClick);
-		findViewById(R.id.mainRevert).setOnClickListener(mOnRevertClick);
-		((RadioGroup) findViewById(R.id.mainMode))
-				.setOnCheckedChangeListener(mOnModeChange);
+		((RadioGroup) findViewById(R.id.mainMode)).setOnCheckedChangeListener(mOnModeChange);
 		forwardSpinner.setOnItemSelectedListener(mOnPresetChange);
 		normalSpinner.setOnItemSelectedListener(mOnPresetChange);
+		findViewById(R.id.mainCurrentDNS).setOnClickListener(new OnClickListener() {
 
-		ArrayAdapter<Preset.Forward> forwardAdapter = new ArrayAdapter<Preset.Forward>(
-				this, android.R.layout.simple_spinner_item,
-				Preset.FORWARD_SERVERS);
-		forwardAdapter
-				.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+			@Override
+			public void onClick(View v) {
+				loadCurrentDNS();
+			}
+		});
+
+		ArrayAdapter<Preset.Forward> forwardAdapter = new ArrayAdapter<Preset.Forward>(this, android.R.layout.simple_spinner_item, Preset.FORWARD_SERVERS);
+		forwardAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
 		forwardSpinner.setAdapter(forwardAdapter);
 
-		ArrayAdapter<Preset.Normal> normalAdapter = new ArrayAdapter<Preset.Normal>(
-				this, android.R.layout.simple_spinner_item,
-				Preset.NORMAL_SERVERS);
-		normalAdapter
-				.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+		ArrayAdapter<Preset.Normal> normalAdapter = new ArrayAdapter<Preset.Normal>(this, android.R.layout.simple_spinner_item, Preset.NORMAL_SERVERS);
+		normalAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
 		normalSpinner.setAdapter(normalAdapter);
 
-		findViewById(R.id.mainRate).setOnClickListener(mOnRateClick);
-		findViewById(R.id.mainDonate).setOnClickListener(mOnDonateClick);
-
-		loadPreferences();
+		loadSettings();
 		loadCurrentDNS();
 		updateViews();
+	}
+
+	@Override
+	public boolean onCreateOptionsMenu(Menu menu) {
+		getSupportMenuInflater().inflate(R.menu.main, menu);
+		return true;
+	}
+
+	@Override
+	public boolean onOptionsItemSelected(MenuItem item) {
+		switch (item.getItemId()) {
+		case R.id.apply:
+			doApply();
+			break;
+		case R.id.revert:
+			doRevert();
+			break;
+		case R.id.rate:
+			doRate();
+			break;
+		case R.id.share:
+			doShare();
+			break;
+		case R.id.donate:
+			doDonate();
+			break;
+		case R.id.about:
+			doAbout();
+			break;
+		default:
+			return super.onOptionsItemSelected(item);
+		}
+		return true;
+	}
+
+	@Override
+	protected void onResume() {
+		super.onResume();
+		IntentFilter filter = new IntentFilter(ConnectivityManager.CONNECTIVITY_ACTION);
+		registerReceiver(mReceiver, filter);
+	}
+
+	@Override
+	protected void onPause() {
+		super.onPause();
+		unregisterReceiver(mReceiver);
+	}
+
+	/***********
+	 * Helpers *
+	 ***********/
+
+	private String getProp(String key) {
+		String line = "";
+		try {
+			Process p = Runtime.getRuntime().exec(new String[] { "getprop", key });
+			BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()));
+			line = reader.readLine();
+			reader.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		return line;
+	}
+
+	private void closeQueitly(InputStream is) {
+		if (is != null) {
+			try {
+				is.close();
+			} catch (IOException e) {
+			}
+		}
+	}
+
+	private void closeQueitly(OutputStream os) {
+		if (os != null) {
+			try {
+				os.close();
+			} catch (IOException e) {
+			}
+		}
+	}
+
+	private int getRunCounter() {
+		return getPreferences(MODE_PRIVATE).getInt("runCounter", 0);
+	}
+
+	private void setRunCounter(int counter) {
+		Editor ed = getPreferences(MODE_PRIVATE).edit();
+		ed.putInt("runCounter", counter);
+		ed.commit();
 	}
 
 	/******************
 	 * Event Handlers *
 	 ******************/
+
+	private class MyReceiver extends BroadcastReceiver {
+
+		@Override
+		public void onReceive(Context context, Intent intent) {
+			mHandler.postDelayed(new Runnable() {
+				@Override
+				public void run() {
+					loadCurrentDNS();
+				}
+			}, 500);
+		}
+	}
 
 	private final OnCheckedChangeListener mOnModeChange = new OnCheckedChangeListener() {
 		@Override
@@ -94,8 +205,7 @@ public class MainActivity extends Activity {
 	private final OnItemSelectedListener mOnPresetChange = new OnItemSelectedListener() {
 
 		@Override
-		public void onItemSelected(AdapterView<?> adapter, View view,
-				int index, long arg3) {
+		public void onItemSelected(AdapterView<?> adapter, View view, int index, long arg3) {
 			updateViews();
 		}
 
@@ -104,61 +214,40 @@ public class MainActivity extends Activity {
 		}
 	};
 
-	private final OnClickListener mOnRateClick = new OnClickListener() {
-		@Override
-		public void onClick(View arg0) {
-			Intent intent = new Intent(Intent.ACTION_VIEW,
-					Uri.parse("market://details?id=" + getPackageName()));
-			startActivity(intent);
-		}
-	};
-
-	private final OnClickListener mOnDonateClick = new OnClickListener() {
-
-		@Override
-		public void onClick(View v) {
-			Intent intent = new Intent(Intent.ACTION_VIEW,
-					Uri.parse(DONATION_URL));
-			startActivity(intent);
-		}
-	};
-
 	private String readServerStatus() {
 		try {
-			File pidFile = new File(getCacheDir(), DNSFORWARD + ".pid");
-			BufferedReader reader = new BufferedReader(new FileReader(pidFile));
+			BufferedReader reader = new BufferedReader(new FileReader(Utils.getPidFile(this)));
 			reader.readLine();
 			String server = reader.readLine();
 			String port = reader.readLine();
 			String type = reader.readLine();
-			return String
-					.format("%s:%s (%s)", server, port, type.toUpperCase());
+			reader.close();
+			return String.format("%s:%s (%s)", server, port, type.toUpperCase());
 		} catch (IOException e) {
 			return "unknown";
 		}
 	}
 
 	private void loadCurrentDNS() {
-		final TextView tv = (TextView) findViewById(R.id.mainCurrentDNS);
-		tv.setText(R.string.please_wait);
-		handler.postDelayed(new Runnable() {
-			@Override
-			public void run() {
-				String dns1 = getProp("net.dns1");
-				String dns2 = getProp("net.dns2");
-				if ("".equals(dns1)) {
-					tv.setText("None");
-				} else if ("127.0.0.1".equals(dns1)) {
-					tv.setText("Forward to " + readServerStatus());
-				} else {
-					if ("".equals(dns2)) {
-						tv.setText(dns1);
-					} else {
-						tv.setText(dns1 + ", " + dns2);
-					}
-				}
+		ConnectivityManager conn = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+		NetworkInfo info = conn.getActiveNetworkInfo();
+
+		TextView tv = (TextView) findViewById(R.id.mainCurrentDNS);
+		String dns1 = getProp("net.dns1");
+		String dns2 = getProp("net.dns2");
+		if (info == null) {
+			tv.setText("No active connection");
+		} else if ("".equals(dns1)) {
+			tv.setText("None");
+		} else if ("127.0.0.1".equals(dns1)) {
+			tv.setText("Forward to " + readServerStatus());
+		} else {
+			if ("".equals(dns2)) {
+				tv.setText(dns1);
+			} else {
+				tv.setText(dns1 + ", " + dns2);
 			}
-		}, 1000);
+		}
 	}
 
 	private void updateViews() {
@@ -202,68 +291,68 @@ public class MainActivity extends Activity {
 		}
 	}
 
-	private final static String DNSFORWARD = "dnsforward";
-
-	private void savePreferences() {
-		SharedPreferences sp = getPreferences(MODE_PRIVATE);
-		Editor ed = sp.edit();
-
+	private void saveSettings() {
 		RadioGroup mode = (RadioGroup) findViewById(R.id.mainMode);
-		ed.putInt("mode", mode.getCheckedRadioButtonId());
+		mSettings.mode = mode.getCheckedRadioButtonId() == R.id.mainForward ? 0 : 1;
 
 		Spinner spinner = (Spinner) findViewById(R.id.mainForwardPreset);
 		EditText server = (EditText) findViewById(R.id.mainServer);
 		EditText port = (EditText) findViewById(R.id.mainPort);
 		RadioGroup type = (RadioGroup) findViewById(R.id.mainType);
-		ed.putInt("forward.preset", spinner.getSelectedItemPosition());
-		ed.putString("forward.server", server.getText().toString());
-		ed.putString("forward.port", port.getText().toString());
-		ed.putInt("forward.type", type.getCheckedRadioButtonId());
+		mSettings.forwardPreset = spinner.getSelectedItemPosition();
+		mSettings.forwardServer = server.getText().toString();
+		mSettings.forwardPort = Integer.parseInt(port.getText().toString());
+		mSettings.forwardType = type.getCheckedRadioButtonId() == R.id.mainUDP ? 0 : 1;
 
 		spinner = (Spinner) findViewById(R.id.mainNormalPreset);
 		EditText primary = (EditText) findViewById(R.id.mainPrimary);
 		EditText secondary = (EditText) findViewById(R.id.mainSecondary);
-		ed.putInt("normal.preset", spinner.getSelectedItemPosition());
-		ed.putString("normal.primary", primary.getText().toString());
-		ed.putString("normal.secondary", secondary.getText().toString());
+		mSettings.normalPreset = spinner.getSelectedItemPosition();
+		mSettings.normalPrimary = primary.getText().toString();
+		mSettings.normalSecondary = secondary.getText().toString();
 
-		ed.commit();
+		CheckBox wifi = (CheckBox) findViewById(R.id.mainAutoWifi);
+		CheckBox mobile = (CheckBox) findViewById(R.id.mainAutoMobile);
+		mSettings.autoWifi = wifi.isChecked();
+		mSettings.autoMobile = mobile.isChecked();
+
+		mSettings.save();
 	}
 
-	private void loadPreferences() {
-		SharedPreferences sp = getPreferences(MODE_PRIVATE);
+	private void loadSettings() {
+		mSettings.load();
 
 		RadioGroup mode = (RadioGroup) findViewById(R.id.mainMode);
-		mode.check(sp.getInt("mode", R.id.mainForward));
+		mode.check(mSettings.mode == 0 ? R.id.mainForward : R.id.mainNormal);
 
 		Spinner spinner = (Spinner) findViewById(R.id.mainForwardPreset);
 		EditText server = (EditText) findViewById(R.id.mainServer);
 		EditText port = (EditText) findViewById(R.id.mainPort);
 		RadioGroup type = (RadioGroup) findViewById(R.id.mainType);
-		spinner.setSelection(sp.getInt("forward.preset", 0));
-		server.setText(sp.getString("forward.server", ""));
-		port.setText(sp.getString("forward.port", ""));
-		type.check(sp.getInt("forward.type", R.id.mainUDP));
+		spinner.setSelection(mSettings.forwardPreset);
+		server.setText(mSettings.forwardServer);
+		port.setText(Integer.toString(mSettings.forwardPort));
+		type.check(mSettings.forwardType == 0 ? R.id.mainUDP : R.id.mainTCP);
 
 		spinner = (Spinner) findViewById(R.id.mainNormalPreset);
 		EditText primary = (EditText) findViewById(R.id.mainPrimary);
 		EditText secondary = (EditText) findViewById(R.id.mainSecondary);
-		spinner.setSelection(sp.getInt("normal.preset", 0));
-		primary.setText(sp.getString("normal.primary", ""));
-		secondary.setText(sp.getString("normal.secondary", ""));
+		spinner.setSelection(mSettings.normalPreset);
+		primary.setText(mSettings.normalPrimary);
+		secondary.setText(mSettings.normalSecondary);
+
+		CheckBox wifi = (CheckBox) findViewById(R.id.mainAutoWifi);
+		CheckBox mobile = (CheckBox) findViewById(R.id.mainAutoMobile);
+		wifi.setChecked(mSettings.autoWifi);
+		mobile.setChecked(mSettings.autoMobile);
 	}
 
-	@TargetApi(9)
 	private void activateForwarder() {
-		File exeFile = new File(getCacheDir(), DNSFORWARD);
-		String exe = exeFile.getAbsolutePath();
 		EditText serverView = (EditText) findViewById(R.id.mainServer);
 		EditText portView = (EditText) findViewById(R.id.mainPort);
-		RadioButton udpView = (RadioButton) findViewById(R.id.mainUDP);
 
 		String server = serverView.getText().toString();
 		String port = portView.getText().toString();
-		String type = udpView.isChecked() ? "udp" : "tcp";
 
 		if (!IP_ADDRESS.matcher(server).matches()) {
 			serverView.requestFocus();
@@ -276,13 +365,13 @@ public class MainActivity extends Activity {
 			return;
 		}
 
+		File exeFile = Utils.getExeFile(this);
 		if (!exeFile.exists()) {
 			InputStream in = null;
 			OutputStream out = null;
 			try {
 				in = getResources().openRawResource(R.raw.dnsforward);
 				out = new FileOutputStream(exeFile);
-
 				byte[] buf = new byte[8192];
 				int len;
 				while ((len = in.read(buf)) > 0) {
@@ -291,43 +380,14 @@ public class MainActivity extends Activity {
 			} catch (IOException e) {
 				e.printStackTrace();
 			} finally {
-				try {
-					if (in != null)
-						in.close();
-					if (out != null)
-						out.close();
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
-			}
-
-			// Set executable
-			if (Build.VERSION.SDK_INT >= 9) {
-				exeFile.setExecutable(true, false);
-			} else {
-				try {
-					Runtime.getRuntime().exec(
-							new String[] { "chmod", "+x", exe });
-				} catch (IOException e) {
-					e.printStackTrace();
-				}
+				closeQueitly(in);
+				closeQueitly(out);
 			}
 		}
 
-		String pid = exe + ".pid";
-		String cmd = String.format("killall %s; %s %s %s %s %s;"
-				+ "setprop net.dns1 127.0.0.1; setprop net.dns2 ''",
-				DNSFORWARD, exe, server, port, type, pid);
-		try {
-			savePreferences();
-			Runtime.getRuntime().exec(new String[] { "su", "-c", cmd })
-					.waitFor();
-			loadCurrentDNS();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
+		saveSettings();
+		mSettings.apply();
+		loadCurrentDNS();
 	}
 
 	private void activateNormal() {
@@ -349,60 +409,159 @@ public class MainActivity extends Activity {
 			return;
 		}
 
-		String cmd = String.format("killall %s;" + "setprop net.dns1 '%s';"
-				+ "setprop net.dns2 '%s'", DNSFORWARD, primary, secondary);
+		saveSettings();
+		mSettings.apply();
+		loadCurrentDNS();
+		Toast.makeText(MainActivity.this, R.string.applied, Toast.LENGTH_SHORT).show();
+	}
 
-		try {
-			savePreferences();
-			Runtime.getRuntime().exec(new String[] { "su", "-c", cmd }).waitFor();
-			loadCurrentDNS();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		} catch (IOException e) {
-			e.printStackTrace();
+	private void doApply() {
+		if (!RootTools.isAccessGiven()) {
+			Toast.makeText(this, getString(R.string.no_access), Toast.LENGTH_LONG).show();
+			finish();
+			return;
+		}
+
+		RadioGroup mode = (RadioGroup) findViewById(R.id.mainMode);
+		if (mode.getCheckedRadioButtonId() == R.id.mainForward) {
+			activateForwarder();
+		} else {
+			activateNormal();
+		}
+
+		int counter = getRunCounter() + 1;
+		setRunCounter(counter);
+		if (counter % 10 == 0) {
+			String items[] = {
+					getString(R.string.rate),
+					getString(R.string.share),
+					getString(R.string.donate) };
+			AlertDialog.Builder builder = new AlertDialog.Builder(this);
+			View title = getLayoutInflater().inflate(R.layout.support_title, null);
+			builder.setCustomTitle(title);
+			builder.setItems(items, mSupportListener);
+			builder.setNeutralButton(R.string.not_now, mSupportListener);
+			builder.setCancelable(true);
+			builder.show();
 		}
 	}
 
-	private final OnClickListener mOnApplyClick = new OnClickListener() {
+	private final DialogInterface.OnClickListener mSupportListener = new DialogInterface.OnClickListener() {
+
 		@Override
-		public void onClick(View arg0) {
-			RadioGroup mode = (RadioGroup) findViewById(R.id.mainMode);
-			if (mode.getCheckedRadioButtonId() == R.id.mainForward) {
-				activateForwarder();
-			} else {
-				activateNormal();
+		public void onClick(DialogInterface dialog, int which) {
+			switch (which) {
+			case 0:
+				doRate();
+				break;
+			case 1:
+				doShare();
+				break;
+			case 2:
+				doDonate();
+				break;
 			}
+			dialog.dismiss();
 		}
 	};
 
-	private final OnClickListener mOnRevertClick = new OnClickListener() {
-		@Override
-		public void onClick(View arg0) {
-			String cmd = String.format("killall %s;" + "setprop net.dns1 '%s';"
-					+ "setprop net.dns2 '%s'", DNSFORWARD,
-					getProp("dhcp.wlan0.dns1"), getProp("dhcp.wlan0.dns2"));
-			try {
-				Runtime.getRuntime().exec(new String[] { "su", "-c", cmd }).waitFor();
-				loadCurrentDNS();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			} catch (IOException e) {
-				e.printStackTrace();
+	private String intToIp(int addr) {
+		if (addr == 0) {
+			return "";
+		}
+		int a = (addr >> 0) & 255;
+		int b = (addr >> 8) & 255;
+		int c = (addr >> 16) & 255;
+		int d = (addr >> 24) & 255;
+		return String.format("%d.%d.%d.%d", a, b, c, d);
+	}
+
+	private void doRevert() {
+		if (!RootTools.isAccessGiven()) {
+			Toast.makeText(this, getString(R.string.no_access), Toast.LENGTH_LONG).show();
+			return;
+		}
+
+		ConnectivityManager conn = (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
+		NetworkInfo info = conn.getActiveNetworkInfo();
+
+		String dns1 = "";
+		String dns2 = "";
+		if (info != null) {
+			if (info.getType() == ConnectivityManager.TYPE_WIFI) {
+				WifiManager wifi = (WifiManager) getSystemService(Context.WIFI_SERVICE);
+				DhcpInfo dhcp = wifi.getDhcpInfo();
+				dns1 = intToIp(dhcp.dns1);
+				dns2 = intToIp(dhcp.dns2);
+			} else if (info.getType() == ConnectivityManager.TYPE_MOBILE) {
+				dns1 = getProp("net.rmnet0.dns1");
+				dns2 = getProp("net.rmnet0.dns2");
+				if ("".equals(dns1)) {
+					dns1 = getProp("net.pdp0.dns1");
+					dns2 = getProp("net.pdp0.dns2");
+				}
 			}
 		}
-	};
 
-	private String getProp(String key) {
-		String line = "";
+		CommandCapture command = new CommandCapture(0,
+				String.format("killall %s", Utils.DAEMON),
+				String.format("setprop net.dns1 '%s'", dns1),
+				String.format("setprop net.dns2 '%s'", dns2));
 		try {
-			Process p = Runtime.getRuntime().exec(
-					new String[] { "getprop", key });
-			BufferedReader reader = new BufferedReader(new InputStreamReader(
-					p.getInputStream()));
-			line = reader.readLine();
-		} catch (IOException e) {
+			RootTools.getShell(true).add(command).waitForFinish();
+		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		return line;
+		loadCurrentDNS();
+		Toast.makeText(MainActivity.this, R.string.reverted, Toast.LENGTH_SHORT).show();
 	}
+
+	private void doRate() {
+		Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + getPackageName()));
+		startActivity(intent);
+	}
+
+	private void doShare() {
+		Intent intent = new Intent(Intent.ACTION_SEND);
+		intent.setType("plain/text");
+		intent.putExtra(Intent.EXTRA_SUBJECT, getString(R.string.share_subject));
+		intent.putExtra(Intent.EXTRA_TEXT, getString(R.string.share_text));
+		startActivity(Intent.createChooser(intent, getString(R.string.share)));
+	}
+
+	private void doDonate() {
+		Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(DONATION_URL));
+		startActivity(intent);
+	}
+
+	private void doAbout() {
+		AlertDialog.Builder builder = new AlertDialog.Builder(this);
+		View about = getLayoutInflater().inflate(R.layout.about, null);
+		builder.setCustomTitle(about);
+		builder.setPositiveButton(R.string.visit_web, mAboutListener);
+		builder.setNeutralButton(R.string.more_apps, mAboutListener);
+		builder.setNegativeButton(R.string.okay, mAboutListener);
+		builder.setCancelable(true);
+		builder.show();
+	}
+
+	private final DialogInterface.OnClickListener mAboutListener = new DialogInterface.OnClickListener() {
+
+		@Override
+		public void onClick(DialogInterface dialog, int which) {
+			Intent intent;
+			switch (which) {
+			case DialogInterface.BUTTON_POSITIVE:
+				intent = new Intent(Intent.ACTION_VIEW, Uri.parse("http://grafian.com"));
+				startActivity(intent);
+				break;
+			case DialogInterface.BUTTON_NEUTRAL:
+				intent = new Intent(Intent.ACTION_VIEW, Uri.parse("http://play.google.com/store/search?q=pub:Grafian%20Software%20Crafter"));
+				startActivity(intent);
+				break;
+			}
+			dialog.dismiss();
+		}
+	};
+
 }
